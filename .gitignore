@@ -1,5 +1,7 @@
 __pycache__/
 *.pyc
 cache/
-checkpoints/
+checkpoints/*
+!checkpoints/standin_minigpt.pt
+!checkpoints/standin_minigpt_factored.pt
 .DS_Store
