@@ -1,0 +1,44 @@
+# Tape Phase-1 config: synthetic stand-in.
+# To use the real orderflow-lm checkpoint later, this is the one-line change:
+#   model.checkpoint: /path/to/orderflow_lm.pt   (plus data.source: lobster)
+run_name: synthetic
+seed: 0
+
+model:
+  arch: minigpt
+  checkpoint: checkpoints/standin_minigpt.pt   # trained on first run if absent
+  n_layers: 4
+  d_model: 64
+  n_heads: 4
+  d_mlp: 256
+  n_ctx: 128
+  train_seed: 0
+  train_steps: 2200
+  train_batch: 16
+  train_tokens: 200000
+
+data:
+  source: synthetic
+  tokenization: combined  # one token per event (see synthetic_factored.yaml)
+  eval_seed: 1          # disjoint from train_seed -> no stream overlap
+  eval_tokens: 40000
+
+probe:
+  mode: event           # event: one row per event, span activations
+                        # concatenated (degenerate 1:1 in combined mode).
+                        # slot: per-slot diagnostic; set label_position too.
+
+cache_dir: cache/synthetic
+cache_batch: 8
+warmup_events: 50       # min COMPLETE left-context events per cached position
+                        # >= W_VOL (50) so realized_vol labels have full
+                        # context; token-based warmup would silently starve it
+
+# boring-explanation gate
+shuffled_tolerance_coeff: 4.0 # |R^2_shuffled| tolerance = coeff/sqrt(n_probed)
+                              # (4.0 reproduces the old 0.02 at n=40k);
+                              # above it => leak, don't report
+selectivity_threshold: 0.10   # min (task - control) R^2 to claim encoding
+
+fig_dir: figures
+results_md: RESULTS.md

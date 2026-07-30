@@ -1,0 +1,45 @@
+# Tape config: synthetic stand-in with FACTORED tokenization.
+# Each event is a 5-token span [TYPE][SIDE][PRICE_OFF][SIZE][DT], matching
+# orderflow-lm's scheme; probes attach the event's latents to one position
+# per span (default: last). n_ctx is 5x larger in tokens so the model still
+# sees ~64 events of context (realized_vol needs a 50-event window).
+run_name: synthetic_factored
+seed: 0
+
+model:
+  arch: minigpt
+  checkpoint: checkpoints/standin_minigpt_factored.pt  # trained on first run
+  n_layers: 4
+  d_model: 64
+  n_heads: 4
+  d_mlp: 256
+  n_ctx: 320            # 64 events x 5 tokens
+  train_seed: 0
+  train_steps: 2200
+  train_batch: 16
+  train_tokens: 300000  # ~60k events
+
+data:
+  source: synthetic
+  tokenization: factored
+  eval_seed: 1          # disjoint from train_seed -> no stream overlap
+  eval_events: 10000    # ~50k tokens, ~10k probed positions
+
+probe:
+  mode: event           # event: one row per event, 5 x d_model span concat
+                        # (restores a non-vacuous Hewitt-Liang control).
+                        # slot: per-slot diagnostic; set label_position
+                        # (last | first | integer slot 0-4).
+
+cache_dir: cache/synthetic_factored
+cache_batch: 8
+warmup_events: 50       # >= W_VOL; 254 warmup tokens -> 66-position stride
+
+# boring-explanation gate
+shuffled_tolerance_coeff: 4.0 # |R^2_shuffled| tolerance = coeff/sqrt(n_probed)
+                              # (4.0 reproduces the old 0.02 at n=40k);
+                              # above it => leak, don't report
+selectivity_threshold: 0.10   # min (task - control) R^2 to claim encoding
+
+fig_dir: figures
+results_md: RESULTS.md
