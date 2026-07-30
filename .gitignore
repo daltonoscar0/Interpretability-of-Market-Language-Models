@@ -1,0 +1,6 @@
+build/
+data/lobster/*
+data/itch/*
+!data/lobster/.gitkeep
+!data/itch/.gitkeep
+*.bin
