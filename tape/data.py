@@ -31,8 +31,10 @@ from __future__ import annotations
 
 import collections
 import dataclasses
+import json
 import math
 import random
+import struct
 
 import numpy as np
 
@@ -465,3 +467,374 @@ def generate_split(seed: int, n_steps: int):
     """Combined-mode entry point, kept for existing callers/tests."""
     s = generate_split_ex(seed, n_steps, "combined")
     return s.tokens, s.latents
+
+
+# ==================================================================== real data
+# Reader for the orderflow-lm factored token stream (pipeline/src/tokenizer).
+# This half of the module produces token ids from the committed .tokens.bin +
+# manifest.json; the synthetic half above is untouched. Book-state LATENTS for
+# probing come from the companion LOBSTER orderbook file (SPEC Decision A) and
+# live in a separate reader; THIS reader only needs tokens + the manifest, so
+# training can run without the (large) orderbook file present.
+#
+# Stream layout (orderflow::tok::tokenize_stream):
+#   BOS SESSION_OPEN <body...> SESSION_CLOSE EOS
+# where <body> is, per LOBSTER message row in order, either a 5-token event
+# tuple [TYPE][SIDE][PRICE_OFF][SIZE][DT] (MsgType 1..6) or a single HALT/RESUME
+# token (MsgType 7). It is NOT a flat 5-tokens-per-event array: halts are one
+# token, and the four session/BOS/EOS specials carry no message row.
+
+# Real vocabulary id ranges (must match include/orderflow/tokenizer.hpp).
+R_UNK, R_BOS, R_EOS = 0, 1, 2
+R_SESSION_OPEN, R_SESSION_CLOSE, R_HALT, R_RESUME = 3, 4, 5, 6
+R_TYPE_LO, R_TYPE_HI = 7, 12       # MsgType 1..6
+R_SIDE_LO, R_SIDE_HI = 13, 14      # BID, ASK
+R_PX_LO, R_PX_HI = 15, 27          # PX-1..PX+10, PX_TAIL (UNK when no level)
+R_SZ_LO, R_SZ_HI = 28, 35          # 8 size bins
+R_DT_LO, R_DT_HI = 36, 51          # DT_ZERO, DT0..DT13, DT_TAIL
+R_EVENT_TOKENS = 5
+_BIN_MAGIC = b"OFTK"
+_BIN_VERSION = 2
+_BIN_HEADER = 28                   # 4 magic + 4 version + 12 ticker + 8 count
+
+
+def read_token_bin(path: str) -> tuple[str, np.ndarray]:
+    """Parse an OFTK v2 token file -> (ticker, ids[int64]). Rejects other
+    versions rather than reinterpreting them (v1 was a 62-id tick-offset
+    vocab)."""
+    with open(path, "rb") as f:
+        buf = f.read()
+    if len(buf) < _BIN_HEADER:
+        raise ValueError(f"{path}: shorter than a token-file header")
+    if buf[:4] != _BIN_MAGIC:
+        raise ValueError(f"{path}: bad magic (not an OFTK token file)")
+    version = struct.unpack_from("<I", buf, 4)[0]
+    if version != _BIN_VERSION:
+        raise ValueError(f"{path}: unsupported OFTK version {version}")
+    ticker_field = buf[8:20]
+    if ticker_field[-1] != 0:
+        raise ValueError(f"{path}: unterminated ticker field")
+    ticker = ticker_field.split(b"\x00", 1)[0].decode("ascii")
+    count = struct.unpack_from("<Q", buf, 20)[0]
+    ids = np.frombuffer(buf, dtype="<u2", count=count, offset=_BIN_HEADER)
+    if len(ids) != count:
+        raise ValueError(f"{path}: truncated token payload")
+    return ticker, ids.astype(np.int64)
+
+
+def load_manifest(path: str) -> dict:
+    """The tokenizer's vocab + per-ticker frozen-bin/fit-provenance manifest."""
+    with open(path) as f:
+        return json.load(f)
+
+
+def _token_event_rows(ids: np.ndarray) -> np.ndarray:
+    """Message-row index owning each token: event tuples and HALT/RESUME tokens
+    advance the row counter (they consume one LOBSTER message/orderbook row);
+    BOS/SESSION_OPEN/SESSION_CLOSE/EOS get -1. Validates that every TYPE token
+    starts a well-formed [TYPE][SIDE][PRICE_OFF][SIZE][DT] tuple so a corrupt or
+    misaligned stream fails loudly instead of training on garbage."""
+    rows = np.full(len(ids), -1, dtype=np.int64)
+    i, row, n = 0, 0, len(ids)
+    while i < n:
+        t = int(ids[i])
+        if R_TYPE_LO <= t <= R_TYPE_HI:
+            if i + R_EVENT_TOKENS > n:
+                raise ValueError(f"truncated event tuple at token {i}")
+            s, px, sz, dt = (int(ids[i + 1]), int(ids[i + 2]),
+                             int(ids[i + 3]), int(ids[i + 4]))
+            if not (R_SIDE_LO <= s <= R_SIDE_HI
+                    and (px == R_UNK or R_PX_LO <= px <= R_PX_HI)
+                    and R_SZ_LO <= sz <= R_SZ_HI
+                    and R_DT_LO <= dt <= R_DT_HI):
+                raise ValueError(f"malformed event tuple at token {i}: "
+                                 f"{ids[i:i + R_EVENT_TOKENS].tolist()}")
+            rows[i:i + R_EVENT_TOKENS] = row
+            row += 1
+            i += R_EVENT_TOKENS
+        elif t in (R_HALT, R_RESUME):
+            rows[i] = row
+            row += 1
+            i += 1
+        elif t in (R_BOS, R_SESSION_OPEN, R_SESSION_CLOSE, R_EOS):
+            i += 1
+        else:
+            raise ValueError(f"unexpected token {t} at position {i}")
+    return rows
+
+
+@dataclasses.dataclass
+class RealTokenStream:
+    """A split of the real token stream, wrapped BOS SESSION_OPEN ... EOS.
+
+    `tokens` is ready to feed the LM. `train_end_index` is the manifest's
+    message-ROW boundary the size/dt bins were fit on -- honored by `split`, and
+    carried so a checkpoint can be pinned to the exact split it was trained on.
+    """
+    tokens: np.ndarray          # [n_tok] int64
+    vocab_size: int
+    train_end_index: int        # manifest row boundary (first NON-train row)
+    n_events: int               # 5-token event tuples in this split
+    ticker: str
+    manifest_format: str
+
+
+def load_real_token_stream(bin_path: str, manifest_path: str,
+                           ticker: str | None = None, split: str = "train",
+                           max_events: int | None = None) -> RealTokenStream:
+    """Load the token stream for one split ('train' | 'eval' | 'all').
+
+    Split is by the manifest's train_end_index (a message-ROW index): 'train'
+    keeps rows [0, train_end_index) -- the exact prefix the quantile bins were
+    fit on -- so training never sees eval-split events. Whole event tuples are
+    kept intact (all five slots share a row). The selected body is re-wrapped as
+    BOS SESSION_OPEN <body> SESSION_CLOSE EOS; original interior HALT/RESUME
+    tokens inside the split are preserved, the original outer specials dropped.
+    """
+    tk, ids = read_token_bin(bin_path)
+    ticker = ticker or tk
+    if ticker != tk:
+        raise ValueError(f"requested ticker {ticker!r} but bin holds {tk!r}")
+    man = load_manifest(manifest_path)
+    if ticker not in man.get("tickers", {}):
+        raise ValueError(f"ticker {ticker!r} not in manifest")
+    te = int(man["tickers"][ticker]["fit"]["train_end_index"])
+    vocab_size = int(man["vocab_size"])
+    if ids.size and int(ids.max()) >= vocab_size:
+        raise ValueError(f"token id {int(ids.max())} >= manifest vocab_size "
+                         f"{vocab_size}")
+
+    rows = _token_event_rows(ids)
+    body, _ = _select_body(ids, rows, te, split, max_events)
+
+    tokens = np.concatenate((
+        np.array([R_BOS, R_SESSION_OPEN], dtype=np.int64),
+        body,
+        np.array([R_SESSION_CLOSE, R_EOS], dtype=np.int64),
+    ))
+    n_events = int(((body >= R_TYPE_LO) & (body <= R_TYPE_HI)).sum())
+    return RealTokenStream(tokens=tokens, vocab_size=vocab_size,
+                           train_end_index=te, n_events=n_events,
+                           ticker=ticker,
+                           manifest_format=str(man.get("format", "")))
+
+
+def _select_body(ids: np.ndarray, rows: np.ndarray, train_end: int,
+                 split: str, max_events: int | None
+                 ) -> tuple[np.ndarray, np.ndarray]:
+    """(body tokens, owning message row per body token) for one split.
+    `max_events` truncates at an event-tuple boundary, never mid-span."""
+    if split == "train":
+        mask = (rows >= 0) & (rows < train_end)
+    elif split == "eval":
+        mask = rows >= train_end
+    elif split == "all":
+        mask = rows >= 0
+    else:
+        raise ValueError(f"unknown split {split!r} (train | eval | all)")
+    body, brows = ids[mask], rows[mask]
+    if max_events is not None:
+        type_pos = np.flatnonzero((body >= R_TYPE_LO) & (body <= R_TYPE_HI))
+        if len(type_pos) > max_events:
+            cut = type_pos[max_events]
+            body, brows = body[:cut], brows[:cut]
+    return body, brows
+
+
+# ------------------------------------------------- orderbook-based latents
+# Ground truth for probing comes from LOBSTER's precomputed orderbook file
+# (SPEC Decision A), NOT from our book reconstruction. Only the level-1
+# columns are needed; the 50-level files are ~1.5 GB x 200 columns, so both
+# readers stream lines and keep O(rows requested) in memory.
+
+
+def read_orderbook_touch(path: str, start_row: int,
+                         stop_row: int) -> np.ndarray:
+    """Rows [start_row, stop_row) of a LOBSTER orderbook file, level-1
+    columns only: [ask_px, ask_sz, bid_px, bid_sz] int64. Splits off just
+    the first four fields of each line; deeper levels are never parsed."""
+    out = np.empty((stop_row - start_row, 4), dtype=np.int64)
+    k = 0
+    with open(path) as f:
+        for i, line in enumerate(f):
+            if i < start_row:
+                continue
+            if i >= stop_row:
+                break
+            a, asz, b, bsz = line.split(",", 4)[:4]
+            out[k] = (int(a), int(asz), int(b), int(bsz))
+            k += 1
+    if k != stop_row - start_row:
+        raise ValueError(f"{path}: wanted rows [{start_row}, {stop_row}) "
+                         f"but file ends at row {start_row + k}")
+    return out
+
+
+def read_message_rows(path: str, start_row: int, stop_row: int) -> np.ndarray:
+    """Rows [start_row, stop_row) of a LOBSTER message file as
+    [type, price, direction] int64 (time and order id are not needed)."""
+    out = np.empty((stop_row - start_row, 3), dtype=np.int64)
+    k = 0
+    with open(path) as f:
+        for i, line in enumerate(f):
+            if i < start_row:
+                continue
+            if i >= stop_row:
+                break
+            c = line.split(",")
+            out[k] = (int(c[1]), int(c[4]), int(c[5]))
+            k += 1
+    if k != stop_row - start_row:
+        raise ValueError(f"{path}: wanted rows [{start_row}, {stop_row}) "
+                         f"but file ends at row {start_row + k}")
+    return out
+
+
+def load_lobster_latents(orderbook_path: str, message_path: str,
+                         tick_size: int, start_row: int,
+                         n_rows: int) -> np.ndarray:
+    """Latents for message rows [start_row, start_row + n_rows): the same
+    five quantities as the synthetic stream (LATENT_NAMES, same order and
+    units-in-ticks) so probe results are directly comparable across sources.
+
+    Conventions match the synthetic extractor exactly: spread / imbalance /
+    ofi / realized_vol describe the book AFTER the row's event (orderbook
+    row i); dist_to_touch is |event price - same-side touch| in ticks
+    against the PRE-event book (row i-1, the tokenizer's PRICE_OFF
+    convention), clamped at 0 so inside-spread orders read 0, and halt rows
+    (type 7) get 0. Rolling windows (OFI over W_OFI, vol over W_VOL events)
+    warm up on up to W_VOL rows BEFORE start_row, so latents at a split
+    boundary carry real history instead of a cold start."""
+    pad = min(start_row, W_VOL)
+    lo, hi = start_row - pad, start_row + n_rows
+    touch = read_orderbook_touch(orderbook_path, lo, hi).astype(np.float64)
+    msg = read_message_rows(message_path, lo, hi)
+    ask_p, ask_sz, bid_p, bid_sz = touch.T
+    n = len(touch)
+    i = np.arange(n)
+
+    spread = (ask_p - bid_p) / tick_size
+    tot = ask_sz + bid_sz
+    imb = np.divide(bid_sz - ask_sz, tot, out=np.zeros(n), where=tot > 0)
+    mid = (ask_p + bid_p) / (2.0 * tick_size)
+
+    # OFI e_n (Cont-Kukanov-Stoikov): term j compares rows j-1 -> j; the
+    # latent is the rolling sum of the last W_OFI terms including j.
+    e = np.zeros(n)
+    if n > 1:
+        b0, b1 = bid_p[:-1], bid_p[1:]
+        a0, a1 = ask_p[:-1], ask_p[1:]
+        qb0, qb1 = bid_sz[:-1], bid_sz[1:]
+        qa0, qa1 = ask_sz[:-1], ask_sz[1:]
+        e_bid = np.where(b1 > b0, qb1, np.where(b1 == b0, qb1 - qb0, -qb0))
+        e_ask = np.where(a1 < a0, qa1, np.where(a1 == a0, qa1 - qa0, -qa0))
+        e[1:] = e_bid - e_ask
+    cs = np.concatenate(([0.0], np.cumsum(e)))
+    ofi = cs[i + 1] - cs[np.maximum(0, i + 1 - W_OFI)]
+
+    # realized vol: population std of the last <= W_VOL 1-step mid diffs
+    # (rets[first:i]), 0 with fewer than 2 diffs -- mirrors the deque logic.
+    rets = np.diff(mid)
+    c1 = np.concatenate(([0.0], np.cumsum(rets)))
+    c2 = np.concatenate(([0.0], np.cumsum(rets * rets)))
+    first = np.maximum(0, i - W_VOL)
+    cnt = (i - first).astype(np.float64)
+    safe = np.maximum(cnt, 1.0)
+    m = (c1[i] - c1[first]) / safe
+    var = (c2[i] - c2[first]) / safe - m * m
+    rvol = np.where(cnt >= 2, np.sqrt(np.maximum(var, 0.0)), 0.0)
+
+    mtype, price, mdir = msg.T
+    prev_bid = np.concatenate(([bid_p[0]], bid_p[:-1]))
+    prev_ask = np.concatenate(([ask_p[0]], ask_p[:-1]))
+    dist = np.where(mdir == 1, prev_bid - price,
+                    price - prev_ask) / tick_size
+    dist = np.where(mtype == 7, 0.0, np.maximum(dist, 0.0))
+
+    lat = np.stack([spread, imb, ofi, dist, rvol], axis=1)[pad:]
+    return np.ascontiguousarray(lat, dtype=np.float32)
+
+
+def _real_span_arrays(tokens: np.ndarray
+                      ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Span bookkeeping for a wrapped real stream: each event tuple is a
+    5-token span; each special (BOS/EOS/session/halt/resume) is its own
+    1-token span, which select_event_rows() then never picks up.
+
+    event_type_id is the event's COMBINED identity over (TYPE, SIDE,
+    PRICE_OFF, SIZE). DT is deliberately EXCLUDED: the Hewitt-Liang control
+    must not be able to absorb the inter-arrival signal (the DT-slot
+    realized_vol ~0.67 diagnostic), and the synthetic combined id has no DT
+    either, so the control stays semantically identical across sources.
+    Specials get distinct negative ids (-1 - token_id)."""
+    n = len(tokens)
+    span_index = np.empty(n, dtype=np.int64)
+    span_pos = np.empty(n, dtype=np.int64)
+    etype = np.empty(n, dtype=np.int64)
+    n_px_codes = R_PX_HI - R_PX_LO + 2       # 13 buckets + UNK
+    i, si = 0, 0
+    while i < n:
+        t = int(tokens[i])
+        if R_TYPE_LO <= t <= R_TYPE_HI:
+            px = int(tokens[i + 2])
+            px_code = 0 if px == R_UNK else px - R_PX_LO + 1
+            eid = ((((t - R_TYPE_LO) * 2 + int(tokens[i + 1]) - R_SIDE_LO)
+                    * n_px_codes + px_code)
+                   * (R_SZ_HI - R_SZ_LO + 1)
+                   + int(tokens[i + 3]) - R_SZ_LO)
+            span_index[i:i + R_EVENT_TOKENS] = si
+            span_pos[i:i + R_EVENT_TOKENS] = np.arange(R_EVENT_TOKENS)
+            etype[i:i + R_EVENT_TOKENS] = eid
+            i += R_EVENT_TOKENS
+        else:
+            span_index[i] = si
+            span_pos[i] = 0
+            etype[i] = -1 - t
+            i += 1
+        si += 1
+    return span_index, span_pos, etype
+
+
+def load_real_eval_stream(bin_path: str, manifest_path: str,
+                          orderbook_path: str, message_path: str,
+                          ticker: str | None = None, split: str = "eval",
+                          max_events: int | None = None) -> StreamData:
+    """Real-data analogue of generate_split_ex for PROBING: one split's
+    token stream plus per-token ground-truth latents from the orderbook
+    file, packaged as StreamData so caching/probes stay source-agnostic.
+
+    Latents are the owning message row's values broadcast across the
+    event's whole 5-token span (the run_probe span-constancy assertion
+    holds by construction). Wrapper specials get the nearest row's values;
+    they are never selected for probing."""
+    tk, ids = read_token_bin(bin_path)
+    ticker = ticker or tk
+    if ticker != tk:
+        raise ValueError(f"requested ticker {ticker!r} but bin holds {tk!r}")
+    man = load_manifest(manifest_path)
+    if ticker not in man.get("tickers", {}):
+        raise ValueError(f"ticker {ticker!r} not in manifest")
+    tinfo = man["tickers"][ticker]
+    te = int(tinfo["fit"]["train_end_index"])
+
+    rows = _token_event_rows(ids)
+    body, brows = _select_body(ids, rows, te, split, max_events)
+    if not len(body):
+        raise ValueError(f"{split!r} split of {bin_path} is empty")
+    tokens = np.concatenate((
+        np.array([R_BOS, R_SESSION_OPEN], dtype=np.int64),
+        body,
+        np.array([R_SESSION_CLOSE, R_EOS], dtype=np.int64),
+    ))
+
+    row_lo, row_hi = int(brows[0]), int(brows[-1]) + 1
+    lat = load_lobster_latents(orderbook_path, message_path,
+                               int(tinfo["tick_size"]), row_lo,
+                               row_hi - row_lo)
+    tok_rows = np.concatenate((
+        [brows[0], brows[0]], brows, [brows[-1], brows[-1]]))
+    latents = lat[tok_rows - row_lo]
+
+    span_index, span_pos, etype = _real_span_arrays(tokens)
+    return StreamData("factored", R_EVENT_TOKENS, tokens, latents,
+                      span_index, span_pos, etype)

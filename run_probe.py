@@ -56,20 +56,36 @@ def main(cfg_path: str) -> None:
     model, mcfg = model_loader.load_model(cfg["model"], tokenization)
 
     # 2. eval stream + ground-truth latents -------------------------------
-    if dcfg.get("source", "synthetic") != "synthetic":
-        raise NotImplementedError(
-            "wire the LOBSTER-derived eval stream in tape/data.py and add a "
-            "branch here")
-    if "eval_events" in dcfg:
-        n_events = int(dcfg["eval_events"])
-    elif tokenization == "combined":
-        n_events = int(dcfg.get("eval_tokens", 40_000))
+    source = dcfg.get("source", "synthetic")
+    if source == "synthetic":
+        if "eval_events" in dcfg:
+            n_events = int(dcfg["eval_events"])
+        elif tokenization == "combined":
+            n_events = int(dcfg.get("eval_tokens", 40_000))
+        else:
+            n_events = int(dcfg.get("eval_tokens", 50_000)) // tdata.SPAN_LEN
+        print("generating eval stream ...")
+        stream = tdata.generate_split_ex(
+            seed=int(dcfg.get("eval_seed", seed + 1)),  # disjoint from train
+            n_steps=n_events, tokenization=tokenization)
+    elif source == "lobster":
+        # Real stream: tokens from the committed .tokens.bin, ground-truth
+        # latents from the LOBSTER orderbook file (level-1 columns, streamed).
+        # Default split 'eval' = message rows >= the manifest's
+        # train_end_index -- never seen in training.
+        print("loading real eval stream + orderbook latents ...")
+        stream = tdata.load_real_eval_stream(
+            bin_path=dcfg["tokens_bin"], manifest_path=dcfg["manifest"],
+            orderbook_path=dcfg["orderbook"], message_path=dcfg["messages"],
+            ticker=dcfg.get("ticker"), split=dcfg.get("split", "eval"),
+            max_events=dcfg.get("eval_events"))
+        n_ev = int((stream.span_pos[stream.event_type_id >= 0] == 0).sum())
+        print(f"loaded {n_ev} {dcfg.get('ticker', '')} "
+              f"{dcfg.get('split', 'eval')}-split events "
+              f"({len(stream.tokens)} tokens)")
     else:
-        n_events = int(dcfg.get("eval_tokens", 50_000)) // tdata.SPAN_LEN
-    print("generating eval stream ...")
-    stream = tdata.generate_split_ex(
-        seed=int(dcfg.get("eval_seed", seed + 1)),  # disjoint from train seed
-        n_steps=n_events, tokenization=tokenization)
+        raise ValueError(f"unknown data.source '{source}' "
+                         f"(synthetic | lobster)")
 
     # 3. cache activations -------------------------------------------------
     cache_dir = cfg.get("cache_dir", "cache/" + run_name)

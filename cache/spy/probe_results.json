@@ -1,0 +1,307 @@
+{
+  "hook_embed": {
+    "spread": {
+      "r2_task": 0.1432622243852103,
+      "lam_task": 100.0,
+      "r2_control": 0.3119120149569786,
+      "r2_shuffled": -0.0020540350005178176,
+      "selectivity": -0.16864979057176832,
+      "pass_shuffled": true,
+      "pass_selectivity": false,
+      "ctx_gain": 0.0
+    },
+    "queue_imbalance": {
+      "r2_task": -0.6597938338671367,
+      "lam_task": 100.0,
+      "r2_control": 0.06247028296970791,
+      "r2_shuffled": -0.009469732746683723,
+      "selectivity": -0.7222641168368447,
+      "pass_shuffled": true,
+      "pass_selectivity": false,
+      "ctx_gain": 0.0
+    },
+    "ofi": {
+      "r2_task": 0.006579896329699353,
+      "lam_task": 100.0,
+      "r2_control": -0.10808251468208918,
+      "r2_shuffled": -0.002451561073918418,
+      "selectivity": 0.11466241101178853,
+      "pass_shuffled": true,
+      "pass_selectivity": true,
+      "ctx_gain": 0.0
+    },
+    "dist_to_touch": {
+      "r2_task": 0.9052699441877858,
+      "lam_task": 10.0,
+      "r2_control": 0.14482085623532226,
+      "r2_shuffled": -0.00036642675254738855,
+      "selectivity": 0.7604490879524636,
+      "pass_shuffled": true,
+      "pass_selectivity": true,
+      "ctx_gain": 0.0
+    },
+    "realized_vol": {
+      "r2_task": 0.28804815250330684,
+      "lam_task": 0.01,
+      "r2_control": 0.12441766505564722,
+      "r2_shuffled": -0.002604128533578276,
+      "selectivity": 0.16363048744765962,
+      "pass_shuffled": true,
+      "pass_selectivity": true,
+      "ctx_gain": 0.0
+    }
+  },
+  "blocks.0.hook_resid_post": {
+    "spread": {
+      "r2_task": 0.4871679561726113,
+      "lam_task": 1.0,
+      "r2_control": 0.3219057154406739,
+      "r2_shuffled": -0.01475496328355308,
+      "selectivity": 0.1652622407319374,
+      "pass_shuffled": true,
+      "pass_selectivity": true,
+      "ctx_gain": 0.343905731787401
+    },
+    "queue_imbalance": {
+      "r2_task": -0.5241636464304718,
+      "lam_task": 100.0,
+      "r2_control": 0.13630656844381261,
+      "r2_shuffled": -0.024344110902568827,
+      "selectivity": -0.6604702148742844,
+      "pass_shuffled": true,
+      "pass_selectivity": false,
+      "ctx_gain": 0.135630187436665
+    },
+    "ofi": {
+      "r2_task": 0.0716644158497618,
+      "lam_task": 10.0,
+      "r2_control": -0.08226001736695587,
+      "r2_shuffled": -0.0016952601545594526,
+      "selectivity": 0.15392443321671767,
+      "pass_shuffled": true,
+      "pass_selectivity": true,
+      "ctx_gain": 0.06508451952006244
+    },
+    "dist_to_touch": {
+      "r2_task": 0.8985785419490094,
+      "lam_task": 100.0,
+      "r2_control": 0.14272130024794238,
+      "r2_shuffled": -0.007959142802690389,
+      "selectivity": 0.755857241701067,
+      "pass_shuffled": true,
+      "pass_selectivity": true,
+      "ctx_gain": -0.0066914022387764005
+    },
+    "realized_vol": {
+      "r2_task": 0.6851831357284796,
+      "lam_task": 1.0,
+      "r2_control": 0.08987379885103053,
+      "r2_shuffled": -0.006642179513016044,
+      "selectivity": 0.595309336877449,
+      "pass_shuffled": true,
+      "pass_selectivity": true,
+      "ctx_gain": 0.3971349832251727
+    }
+  },
+  "blocks.1.hook_resid_post": {
+    "spread": {
+      "r2_task": 0.8252635150401725,
+      "lam_task": 100.0,
+      "r2_control": 0.3615678840432792,
+      "r2_shuffled": -0.009884844386120584,
+      "selectivity": 0.46369563099689326,
+      "pass_shuffled": true,
+      "pass_selectivity": true,
+      "ctx_gain": 0.6820012906549622
+    },
+    "queue_imbalance": {
+      "r2_task": -0.5066130926715313,
+      "lam_task": 100.0,
+      "r2_control": 0.18174290558264827,
+      "r2_shuffled": -0.02650241744568338,
+      "selectivity": -0.6883559982541796,
+      "pass_shuffled": true,
+      "pass_selectivity": false,
+      "ctx_gain": 0.15318074119560543
+    },
+    "ofi": {
+      "r2_task": 0.1979943333947084,
+      "lam_task": 100.0,
+      "r2_control": -0.020057500797805217,
+      "r2_shuffled": -0.013752758541901056,
+      "selectivity": 0.21805183419251362,
+      "pass_shuffled": true,
+      "pass_selectivity": true,
+      "ctx_gain": 0.19141443706500905
+    },
+    "dist_to_touch": {
+      "r2_task": 0.911850867053543,
+      "lam_task": 100.0,
+      "r2_control": 0.23591398157682253,
+      "r2_shuffled": -0.017274162417894035,
+      "selectivity": 0.6759368854767205,
+      "pass_shuffled": true,
+      "pass_selectivity": true,
+      "ctx_gain": 0.006580922865757177
+    },
+    "realized_vol": {
+      "r2_task": 0.826312801583815,
+      "lam_task": 10.0,
+      "r2_control": 0.2408167922384692,
+      "r2_shuffled": -0.00861346300304966,
+      "selectivity": 0.5854960093453458,
+      "pass_shuffled": true,
+      "pass_selectivity": true,
+      "ctx_gain": 0.5382646490805082
+    }
+  },
+  "blocks.2.hook_resid_post": {
+    "spread": {
+      "r2_task": 0.84304945045271,
+      "lam_task": 10.0,
+      "r2_control": 0.31588863457849514,
+      "r2_shuffled": -0.024294560567663215,
+      "selectivity": 0.5271608158742148,
+      "pass_shuffled": true,
+      "pass_selectivity": true,
+      "ctx_gain": 0.6997872260674997
+    },
+    "queue_imbalance": {
+      "r2_task": -0.5295050742185452,
+      "lam_task": 100.0,
+      "r2_control": 0.19954361555526634,
+      "r2_shuffled": -0.02361814144686325,
+      "selectivity": -0.7290486897738115,
+      "pass_shuffled": true,
+      "pass_selectivity": false,
+      "ctx_gain": 0.13028875964859155
+    },
+    "ofi": {
+      "r2_task": 0.25861686543486595,
+      "lam_task": 100.0,
+      "r2_control": 0.007015983272414816,
+      "r2_shuffled": -0.014971349544013135,
+      "selectivity": 0.25160088216245113,
+      "pass_shuffled": true,
+      "pass_selectivity": true,
+      "ctx_gain": 0.2520369691051666
+    },
+    "dist_to_touch": {
+      "r2_task": 0.8906632752585985,
+      "lam_task": 100.0,
+      "r2_control": 0.19689042713330085,
+      "r2_shuffled": -0.02132728669004691,
+      "selectivity": 0.6937728481252976,
+      "pass_shuffled": true,
+      "pass_selectivity": true,
+      "ctx_gain": -0.014606668929187383
+    },
+    "realized_vol": {
+      "r2_task": 0.8235024838617541,
+      "lam_task": 0.01,
+      "r2_control": 0.23720556169359786,
+      "r2_shuffled": -0.017723700707576784,
+      "selectivity": 0.5862969221681562,
+      "pass_shuffled": true,
+      "pass_selectivity": true,
+      "ctx_gain": 0.5354543313584472
+    }
+  },
+  "blocks.3.hook_resid_post": {
+    "spread": {
+      "r2_task": 0.8323471154988983,
+      "lam_task": 100.0,
+      "r2_control": 0.3323668443917953,
+      "r2_shuffled": -0.023400208685545598,
+      "selectivity": 0.49998027110710297,
+      "pass_shuffled": true,
+      "pass_selectivity": true,
+      "ctx_gain": 0.689084891113688
+    },
+    "queue_imbalance": {
+      "r2_task": -0.4735513970761711,
+      "lam_task": 100.0,
+      "r2_control": 0.17818464020444347,
+      "r2_shuffled": -0.02066215261847426,
+      "selectivity": -0.6517360372806146,
+      "pass_shuffled": true,
+      "pass_selectivity": false,
+      "ctx_gain": 0.18624243679096564
+    },
+    "ofi": {
+      "r2_task": 0.3480625826521859,
+      "lam_task": 0.01,
+      "r2_control": -0.08610671069384557,
+      "r2_shuffled": -0.028341615775439255,
+      "selectivity": 0.4341692933460315,
+      "pass_shuffled": false,
+      "pass_selectivity": true,
+      "ctx_gain": 0.3414826863224866
+    },
+    "dist_to_touch": {
+      "r2_task": 0.845734389432228,
+      "lam_task": 100.0,
+      "r2_control": 0.13518222682738645,
+      "r2_shuffled": -0.018408205458294136,
+      "selectivity": 0.7105521626048416,
+      "pass_shuffled": true,
+      "pass_selectivity": true,
+      "ctx_gain": -0.05953555475555783
+    },
+    "realized_vol": {
+      "r2_task": 0.8026151540221245,
+      "lam_task": 0.01,
+      "r2_control": 0.24526081109457143,
+      "r2_shuffled": -0.017500710436916034,
+      "selectivity": 0.557354342927553,
+      "pass_shuffled": true,
+      "pass_selectivity": true,
+      "ctx_gain": 0.5145670015188176
+    }
+  },
+  "_meta": {
+    "tokenization": "factored",
+    "probe_mode": "event",
+    "policy_desc": "event-concat (5x64)",
+    "n_probed": 19995,
+    "n_cached": 99980,
+    "span_len": 5,
+    "warmup_events": 50,
+    "shuffled_tolerance_coeff": 4.0,
+    "shuffled_tolerance": 0.02828780744441858,
+    "hook_names": [
+      "hook_embed",
+      "blocks.0.hook_resid_post",
+      "blocks.1.hook_resid_post",
+      "blocks.2.hook_resid_post",
+      "blocks.3.hook_resid_post"
+    ],
+    "latent_names": [
+      "spread",
+      "queue_imbalance",
+      "ofi",
+      "dist_to_touch",
+      "realized_vol"
+    ],
+    "control_diagnostics": {
+      "n_positions": 19995,
+      "n_distinct_types": 312,
+      "events_per_type": {
+        "min": 1,
+        "p25": 5,
+        "median": 13,
+        "p75": 45,
+        "max": 1023
+      },
+      "frac_types_lt5": 0.2403846153846154,
+      "frac_test_unseen_type": 0.008666666666666666
+    },
+    "dt_slot_realized_vol": {
+      "hook_embed": 0.271,
+      "blocks.0.hook_resid_post": 0.633,
+      "blocks.1.hook_resid_post": 0.7299,
+      "blocks.2.hook_resid_post": 0.7608,
+      "blocks.3.hook_resid_post": 0.7384
+    }
+  }
+}

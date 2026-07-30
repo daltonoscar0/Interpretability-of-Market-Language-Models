@@ -4,3 +4,8 @@ data/itch/*
 !data/lobster/.gitkeep
 !data/itch/.gitkeep
 *.bin
+# the tokenized corpora are the pipeline/analysis interface (~14 MB total):
+# tracked so a fresh clone can train without fetching the 1.7 GB CSVs
+!data/tokens/SPY_50.tokens.bin
+!data/tokens/MSFT_50.tokens.bin
+!data/tokens/AAPL_50.tokens.bin

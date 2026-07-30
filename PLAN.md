@@ -13,10 +13,20 @@ controls + sample-size-scaled shuffled baselines, contextual gain,
 "what is encoded where" figures.
 
 Remaining:
-- [ ] Real orderflow-lm checkpoint + LOBSTER eval stream
-      (`model.checkpoint` in config; `EventSource` branch in tape/data.py)
+- [x] Real orderflow-lm checkpoint + LOBSTER eval stream (2026-07-30:
+      `configs/spy.yaml`, lobster branch in run_probe, orderbook-based
+      latents in tape/data.py; see README "What the probes found on SPY")
 - [ ] Probe error bars: multi-seed control/shuffled draws + block bootstrap
-      over the chronological test split
+      over the chronological test split. Concrete motivator: queue_imbalance
+      on SPY is regime-persistent (test-block mean +0.383 vs train +0.044)
+      and unmeasurable with a single chronological split.
+- [ ] Per-layer shuffled tolerance. On the SPY run OFI's shuffled baselines
+      drift monotonically with depth (-0.002, -0.002, -0.014, -0.015,
+      -0.028 across embed..L3). That is not noise: deeper layers have more
+      correlated features, so ridge overfits shuffled labels slightly more.
+      The L3 do-not-report is therefore systematic rather than a coin flip,
+      and the drift will bite other latents in deeper models. The fixed
+      coefficient 4.0/sqrt(n) may need to become per-layer.
 
 ## Phase 2 — causal analysis
 

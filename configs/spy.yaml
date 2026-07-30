@@ -1,0 +1,52 @@
+# Tape config: REAL SPY order flow (LOBSTER 2012-06-21, 50-level sample,
+# 09:30-10:30). Tokens come from the committed orderflow-lm stream
+# (pipeline/data/tokens); ground-truth latents from the orderbook file's
+# level-1 columns (SPEC Decision A), streamed -- the CSV is ~1.5 GB and is
+# never loaded whole. Probing runs on the EVAL split (message rows >=
+# train_end_index), which training never saw. The checkpoint is NOT
+# auto-trained (long CPU job): run tape.model_loader.train_spy first.
+run_name: spy
+seed: 0
+
+model:
+  arch: minigpt
+  source: lobster
+  checkpoint: checkpoints/spy_minigpt.pt
+  manifest: pipeline/data/tokens/manifest.json
+  ticker: SPY           # vocab (52) + split provenance come from the manifest
+  n_layers: 4
+  d_model: 64
+  n_heads: 4
+  d_mlp: 256
+  n_ctx: 320            # 64 events x 5 tokens, same context as the stand-in
+  train_seed: 0
+  train_steps: 8000     # x16 batch x320 tok ~= 41M tokens, ~9 epochs of train
+  train_batch: 16
+
+data:
+  source: lobster
+  tokenization: factored
+  tokens_bin: pipeline/data/tokens/SPY_50.tokens.bin
+  manifest: pipeline/data/tokens/manifest.json
+  orderbook: pipeline/data/lobster/SPY_2012-06-21_34200000_37800000_orderbook_50.csv
+  messages: pipeline/data/lobster/SPY_2012-06-21_34200000_37800000_message_50.csv
+  ticker: SPY
+  split: eval           # rows >= train_end_index (923789): held out of training
+  eval_events: 20000    # first 20k eval events -> ~100k cached positions
+
+probe:
+  mode: event           # one row per event, 5 x d_model span concat; the
+                        # control id is (TYPE, SIDE, PRICE_OFF, SIZE) -- DT
+                        # excluded so the control can't absorb inter-arrival
+                        # signal (see data._real_span_arrays)
+
+cache_dir: cache/spy
+cache_batch: 8
+warmup_events: 50       # >= W_VOL; every probed event has 50 events of context
+
+# boring-explanation gate (same thresholds as synthetic runs)
+shuffled_tolerance_coeff: 4.0
+selectivity_threshold: 0.10
+
+fig_dir: figures
+results_md: RESULTS.md
