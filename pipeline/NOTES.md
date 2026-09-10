@@ -12,20 +12,20 @@ autoregressive model, then analyze it with surprisal and probing methods.
   everything up to and including the binary token stream.
 
 ## Architecture (pipeline stages)
-1. `src/parser/`    — LOBSTER message-file parser (CSV) first; ITCH 5.0 binary later.
-2. `src/book/`      — order book reconstruction (per-side price-level book),
+1. `src/parser/`, LOBSTER message-file parser (CSV) first; ITCH 5.0 binary later.
+2. `src/book/`, order book reconstruction (per-side price-level book),
                       validated against LOBSTER's precomputed orderbook files.
-3. `src/tokenizer/` — normalized event -> factored token sequence
+3. `src/tokenizer/`, normalized event -> factored token sequence
                       [TYPE][SIDE][PRICE_OFF][SIZE][DT], FST-style transduction.
-4. `src/bpe/`       — BPE over the factored stream; vocab-size sweep (raw, 1k, 4k, 16k).
-5. `analysis/`      — corpus statistics: token frequency (Zipf plot), bigram
+4. `src/bpe/`, BPE over the factored stream; vocab-size sweep (raw, 1k, 4k, 16k).
+5. `analysis/`, corpus statistics: token frequency (Zipf plot), bigram
                       stats, round-trip validation. Python is fine here.
 
 ## Tokenization spec (source of truth: SPEC.md)
 - Price: signed occupied-level index on the event's side (-1 = inside
   spread, 0 = at best, +k = k occupied levels better), buckets -1..+10
   plus one positive tail.
-- Size: quantile bins (8) fit on TRAINING data only — never full-dataset stats.
+- Size: quantile bins (8) fit on TRAINING data only, never full-dataset stats.
 - Time: per-event delta-t token, log-bucketed (~14 buckets, sub-ms to multi-sec).
 - Identity: v1 drops order reference identity; document as a limitation.
 - Boundaries: never cross day boundaries; special tokens for session open/close,

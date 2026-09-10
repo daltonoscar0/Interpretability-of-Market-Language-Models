@@ -6,3 +6,11 @@ checkpoints/*
 !checkpoints/standin_minigpt_factored.pt
 .DS_Store
 !checkpoints/spy_minigpt.pt
+CLAUDE.md
+AGENTS.md
+.claude/
+.agentnotes/
+.cursor/
+.mcp.json
+tasks/lessons.md
+tasks/todo.md
