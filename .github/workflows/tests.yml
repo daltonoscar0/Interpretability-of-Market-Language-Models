@@ -37,10 +37,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No pip cache: the repo has neither requirements.txt nor pyproject.toml,
+      # and setup-python's cache fails the job outright when it has no
+      # dependency file to hash.
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: pip
 
       # The CPU wheel: nothing in the sanity suite touches a GPU, and the
       # default CUDA build is an order of magnitude bigger.
