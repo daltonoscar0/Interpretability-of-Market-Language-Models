@@ -1,5 +1,7 @@
 # Tape
 
+[![tests](https://github.com/daltonoscar0/Interpretability-of-Market-Language-Models/actions/workflows/tests.yml/badge.svg)](https://github.com/daltonoscar0/Interpretability-of-Market-Language-Models/actions/workflows/tests.yml)
+
 This repository turns raw limit order book data into a trained language model
 and then interrogates the model. The pipeline parses LOBSTER message files,
 reconstructs the order book and validates the reconstruction row by row
@@ -145,7 +147,15 @@ ctest --test-dir build
 
 Token streams and the manifest are committed under `pipeline/data/tokens/`
 (the three `.tokens.bin` files total about 14 MB), so the Python half trains
-without any download. The raw CSVs are needed only for probing latents and for
+without any download. They are regenerable — steps 2-4 of
+[`pipeline/README.md`](pipeline/README.md) fit the bins on the training split,
+tokenize, and round-trip the result — but doing so needs the raw LOBSTER CSVs,
+so they are kept in the repo rather than regenerated:
+
+```sh
+pipeline/scripts/fetch_lobster_sample.sh                      # ~1.7 GB
+cd pipeline && build/tokenizer_fit ... && build/tokenize ... && build/token_roundtrip ...
+``` The raw CSVs are needed only for probing latents and for
 reproducing the corpus; they total about 1.7 GB and are fetched with
 confirmation:
 
@@ -177,3 +187,7 @@ detail lives in `tape/README.md`, run history in `RESULTS.md`, the roadmap in
 `PLAN.md`.
 
 MIT license, see `LICENSE`.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
