@@ -1,0 +1,64 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  cpp:
+    name: C++ pipeline
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compiler version
+        run: g++ --version
+
+      - name: Configure
+        working-directory: pipeline
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        working-directory: pipeline
+        run: cmake --build build -j
+
+      # 15 tests: parser, book, validate, tokenizer, plus the CLI-level guards
+      # (divergence detection, split boundaries, tokenize-requires-fit).
+      # These use the checked-in fixtures, not the 1.7 GB LOBSTER sample.
+      - name: Run tests
+        working-directory: pipeline
+        run: ctest --test-dir build --output-on-failure
+
+  python:
+    name: Python sanity
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # No pip cache: the repo has neither requirements.txt nor pyproject.toml,
+      # and setup-python's cache fails the job outright when it has no
+      # dependency file to hash.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # The CPU wheel: nothing in the sanity suite touches a GPU, and the
+      # default CUDA build is an order of magnitude bigger.
+      - name: Install torch (CPU build)
+        run: pip install --index-url https://download.pytorch.org/whl/cpu torch
+
+      # matplotlib is needed even though nothing here draws: test_sanity's
+      # position-selection check imports run_probe, which imports matplotlib at
+      # module level ("Phase-1 deliverable is a figure"). This matches the
+      # install line in the README.
+      - name: Install
+        run: pip install numpy pyyaml matplotlib
+
+      # 11 checks, about 30 s. Reads pipeline/data/tokens/manifest.json, which
+      # is committed; builds its own token fixtures in a temp dir. No download,
+      # no checkpoint. run_probe.py on configs/spy.yaml is NOT run here: it
+      # needs the orderbook CSVs from the LOBSTER sample.
+      - name: Run sanity checks
+        run: python -m tape.tests.test_sanity
